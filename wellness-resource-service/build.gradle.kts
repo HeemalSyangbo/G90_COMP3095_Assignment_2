@@ -25,15 +25,23 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-data-redis")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 	implementation("org.springframework.boot:spring-boot-starter-web")
+
+	// ✅ Kafka
+	implementation("org.springframework.kafka:spring-kafka")
+
 	runtimeOnly("org.postgresql:postgresql")
+
+	// ✅ Tests
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
-	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+	testImplementation("org.springframework.kafka:spring-kafka-test")
 	testImplementation("com.h2database:h2")
+	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks.withType<Test> {
 	useJUnitPlatform()
 }
+
 tasks.bootJar {
 	archiveFileName.set("wellness-resource-service.jar")
 }

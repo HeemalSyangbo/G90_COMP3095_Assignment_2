@@ -43,6 +43,8 @@ dependencies {
     testImplementation("org.testcontainers:postgresql")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
 
+    implementation("org.springframework.kafka:spring-kafka")
+
 
 
 }

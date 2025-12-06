@@ -6,7 +6,7 @@ spring:
     name: event-service
 
   datasource:
-    url: jdbc:postgresql://localhost:5435/eventdb   # local run
+    url: jdbc:postgresql://event-db:5432/eventdb   # inside docker
     username: event_user
     password: event_pass
 
@@ -17,9 +17,14 @@ spring:
     properties:
       hibernate.format_sql: true
 
+  kafka:
+    bootstrap-servers: kafka:9092      # 🔴 IMPORTANT: service name, NOT localhost
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
 management:
   endpoints:
     web:
       exposure:
         include: health,info
-

@@ -1,5 +1,6 @@
 package ca.gbc.comp3095.event.service;
 
+import ca.gbc.comp3095.event.kafka.EventProducer;
 import ca.gbc.comp3095.event.model.Event;
 import ca.gbc.comp3095.event.repo.EventRepository;
 import ca.gbc.comp3095.event.web.dto.ResourceResponse;
@@ -17,11 +18,15 @@ public class EventService {
 
     private final EventRepository repo;
     private final WebClient wellnessWebClient;
+    private final EventProducer producer;   // 👈 NEW: Kafka producer
 
-    // Inject WebClient bean configured with baseUrl http://wellness-resource-service:8081
-    public EventService(EventRepository repo, WebClient wellnessWebClient) {
+    // Inject WebClient bean + Kafka producer
+    public EventService(EventRepository repo,
+                        WebClient wellnessWebClient,
+                        EventProducer producer) {
         this.repo = repo;
         this.wellnessWebClient = wellnessWebClient;
+        this.producer = producer;
     }
 
     public List<Event> findAll(Optional<LocalDate> date, Optional<String> location) {
@@ -36,8 +41,10 @@ public class EventService {
         }
         if (date.isPresent()) {
             LocalDate d = date.get();
-            return repo.findByDateBetween(d.atStartOfDay(),
-                    d.plusDays(1).atStartOfDay().minusNanos(1));
+            return repo.findByDateBetween(
+                    d.atStartOfDay(),
+                    d.plusDays(1).atStartOfDay().minusNanos(1)
+            );
         }
         if (location.isPresent()) {
             return repo.findByLocationIgnoreCase(location.get());
@@ -50,13 +57,23 @@ public class EventService {
     }
 
     public Event create(Event e) {
-        if (e.getId() == null) e.setId(UUID.randomUUID());
-        return repo.save(e);
+        // ensure ID set
+        if (e.getId() == null) {
+            e.setId(UUID.randomUUID());
+        }
+
+        Event saved = repo.save(e);
+
+        // 👇 NEW: after saving, publish Kafka message
+        producer.sendEventCreated(saved);
+
+        return saved;
     }
 
     public Optional<Event> update(UUID id, Event updated) {
         return repo.findById(id).map(old -> {
             updated.setId(id);
+            // keep existing registrations
             updated.getRegisteredStudentIds().addAll(old.getRegisteredStudentIds());
             return repo.save(updated);
         });
@@ -65,6 +82,7 @@ public class EventService {
     public boolean delete(UUID id) {
         if (!repo.existsById(id)) return false;
         repo.deleteById(id);
+        // (optional) you could send a "deleted" event here later
         return true;
     }
 
@@ -85,7 +103,7 @@ public class EventService {
         });
     }
 
-    // ---------- NEW: inter-service call ----------
+    // ---------- Inter-service call to wellness-resource-service ----------
 
     public List<ResourceResponse> fetchResourcesForCategory(String category) {
         if (category == null || category.isBlank()) return Collections.emptyList();
@@ -98,9 +116,10 @@ public class EventService {
                     .retrieve()
                     .bodyToFlux(ResourceResponse.class)
                     .collectList()
-                    .block(); // ok for simple service; keeps controller signature synchronous
+                    .block(); // simple synchronous call is fine here
         } catch (WebClientResponseException ex) {
-            System.err.println("Wellness service call failed: " + ex.getStatusCode() + " " + ex.getMessage());
+            System.err.println("Wellness service call failed: "
+                    + ex.getStatusCode() + " " + ex.getMessage());
             return Collections.emptyList();
         } catch (Exception ex) {
             System.err.println("Wellness service call error: " + ex.getMessage());
