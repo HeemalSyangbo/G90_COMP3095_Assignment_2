@@ -18,35 +18,38 @@ repositories {
 }
 
 dependencies {
+
+    // --- Spring Boot Core ---
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
-    implementation("org.springframework.boot:spring-boot-starter-webflux")
+    implementation("org.springframework.boot:spring-boot-starter-webflux")  // WebClient
 
-    // Will use in Step 3/4
+    // --- Database ---
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     runtimeOnly("org.postgresql:postgresql")
     testRuntimeOnly("org.postgresql:postgresql")
 
-    // Optional but helpful
+    // --- Kafka ---
+    implementation("org.springframework.kafka:spring-kafka")
+
+    // --- Resilience4j (CircuitBreaker + Retry) ---
+    implementation("io.github.resilience4j:resilience4j-spring-boot3:2.2.0")
+
+    // --- Lombok (optional but helpful) ---
     compileOnly("org.projectlombok:lombok:1.18.34")
     annotationProcessor("org.projectlombok:lombok:1.18.34")
 
+    // --- Testing ---
     testImplementation(platform("org.junit:junit-bom:5.11.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 
-    // Testcontainers (we’ll use later for integration tests)
-    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    // --- Testcontainers ---
     testImplementation(platform("org.testcontainers:testcontainers-bom:1.20.3"))
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:postgresql")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
-
-    implementation("org.springframework.kafka:spring-kafka")
-
-
-
 }
 
 tasks.test {

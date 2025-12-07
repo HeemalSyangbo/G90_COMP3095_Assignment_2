@@ -4,9 +4,10 @@ import ca.gbc.comp3095.event.kafka.EventProducer;
 import ca.gbc.comp3095.event.model.Event;
 import ca.gbc.comp3095.event.repo.EventRepository;
 import ca.gbc.comp3095.event.web.dto.ResourceResponse;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -18,7 +19,7 @@ public class EventService {
 
     private final EventRepository repo;
     private final WebClient wellnessWebClient;
-    private final EventProducer producer;   // 👈 NEW: Kafka producer
+    private final EventProducer producer;   // Kafka producer
 
     // Inject WebClient bean + Kafka producer
     public EventService(EventRepository repo,
@@ -64,7 +65,7 @@ public class EventService {
 
         Event saved = repo.save(e);
 
-        // 👇 NEW: after saving, publish Kafka message
+        // After saving, publish Kafka message
         producer.sendEventCreated(saved);
 
         return saved;
@@ -82,7 +83,7 @@ public class EventService {
     public boolean delete(UUID id) {
         if (!repo.existsById(id)) return false;
         repo.deleteById(id);
-        // (optional) you could send a "deleted" event here later
+        // (optional) send a "deleted" event later if needed
         return true;
     }
 
@@ -104,26 +105,30 @@ public class EventService {
     }
 
     // ---------- Inter-service call to wellness-resource-service ----------
+    // Resilience4j: CircuitBreaker + Retry with fallback
 
+    @CircuitBreaker(name = "wellnessResources", fallbackMethod = "fallbackResourcesForCategory")
+    @Retry(name = "wellnessResources")
     public List<ResourceResponse> fetchResourcesForCategory(String category) {
         if (category == null || category.isBlank()) return Collections.emptyList();
-        try {
-            return wellnessWebClient.get()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/resources")
-                            .queryParam("category", category)
-                            .build())
-                    .retrieve()
-                    .bodyToFlux(ResourceResponse.class)
-                    .collectList()
-                    .block(); // simple synchronous call is fine here
-        } catch (WebClientResponseException ex) {
-            System.err.println("Wellness service call failed: "
-                    + ex.getStatusCode() + " " + ex.getMessage());
-            return Collections.emptyList();
-        } catch (Exception ex) {
-            System.err.println("Wellness service call error: " + ex.getMessage());
-            return Collections.emptyList();
-        }
+
+        return wellnessWebClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/resources")
+                        .queryParam("category", category)
+                        .build())
+                .retrieve()
+                .bodyToFlux(ResourceResponse.class)
+                .collectList()
+                .block(); // simple synchronous call is fine here
+    }
+
+    // Fallback method when wellness-service is down/slow
+    @SuppressWarnings("unused")
+    private List<ResourceResponse> fallbackResourcesForCategory(String category, Throwable t) {
+        System.err.println("⚠️ Fallback triggered for category '" + category +
+                "' due to: " + t.getClass().getSimpleName() + " - " + t.getMessage());
+        // Safe default – no resources instead of breaking the event-service
+        return Collections.emptyList();
     }
 }
